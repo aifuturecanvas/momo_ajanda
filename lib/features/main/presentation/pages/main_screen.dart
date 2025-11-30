@@ -3,6 +3,7 @@ import 'package:momo_ajanda/features/agenda/presentation/pages/agenda_screen.dar
 import 'package:momo_ajanda/features/assistant/presentation/pages/assistant_screen.dart';
 import 'package:momo_ajanda/features/notes/presentation/pages/notes_screen.dart';
 import 'package:momo_ajanda/features/profile/presentation/pages/profile_screen.dart';
+import 'package:momo_ajanda/features/reminders/presentation/pages/reminders_screen.dart';
 import 'package:momo_ajanda/features/tasks/presentation/pages/tasks_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -13,22 +14,19 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // Hangi sekmenin seçili olduğunu takip eden değişken. 0, ilk sekme demek.
   int _selectedIndex = 0;
 
-  // Navigasyon menüsündeki her bir sekmeye karşılık gelen ekranların listesi.
-  static const List<Widget> _widgetOptions = <Widget>[
+  // 6 sekmeli ekran listesi
+  static const List<Widget> _screens = <Widget>[
     AgendaScreen(),
     TasksScreen(),
+    RemindersScreen(), // YENİ EKLENEN
     NotesScreen(),
     AssistantScreen(),
     ProfileScreen(),
   ];
 
-  // Bir sekmeye tıklandığında bu fonksiyon çalışır.
   void _onItemTapped(int index) {
-    // setState, Flutter'a ekranda bir şeyin değiştiğini ve
-    // ekranı yeniden çizmesi gerektiğini söyler.
     setState(() {
       _selectedIndex = index;
     });
@@ -37,48 +35,73 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Body olarak, o an hangi sekme seçiliyse o ekranı gösteriyoruz.
-      body: Center(
-        child: _widgetOptions.elementAt(_selectedIndex),
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(0, Icons.calendar_today_outlined,
+                    Icons.calendar_today, 'Ajanda'),
+                _buildNavItem(1, Icons.check_circle_outline, Icons.check_circle,
+                    'Görevler'),
+                _buildNavItem(2, Icons.notifications_outlined,
+                    Icons.notifications, 'Hatırlat'),
+                _buildNavItem(
+                    3, Icons.description_outlined, Icons.description, 'Notlar'),
+                _buildNavItem(
+                    4, Icons.smart_toy_outlined, Icons.smart_toy, 'Momo'),
+                _buildNavItem(5, Icons.person_outline, Icons.person, 'Profil'),
+              ],
+            ),
+          ),
+        ),
       ),
-      // Alt navigasyon menüsünü burada tanımlıyoruz.
-      bottomNavigationBar: BottomNavigationBar(
-        // Menüdeki ikon ve yazılar.
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: 'Ajanda',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle_outline),
-            activeIcon: Icon(Icons.check_circle),
-            label: 'Görevler',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.description_outlined),
-            activeIcon: Icon(Icons.description),
-            label: 'Notlar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.smart_toy_outlined),
-            activeIcon: Icon(Icons.smart_toy),
-            label: 'Asistan',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Profil',
-          ),
-        ],
-        currentIndex: _selectedIndex, // Hangi sekmenin aktif olduğunu belirtir.
-        onTap: _onItemTapped, // Tıklanma olayını yöneten fonksiyon.
+    );
+  }
 
-        // Temamızdan renkleri alarak görünümü tasarıma uygun hale getiriyoruz.
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true, // Seçili olmayan etiketleri de göster.
-        type: BottomNavigationBarType.fixed, // Menünün sabit kalmasını sağlar.
+  Widget _buildNavItem(
+      int index, IconData icon, IconData activeIcon, String label) {
+    final isSelected = _selectedIndex == index;
+    final color =
+        isSelected ? Theme.of(context).primaryColor : Colors.grey.shade600;
+
+    return InkWell(
+      onTap: () => _onItemTapped(index),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? activeIcon : icon,
+              color: color,
+              size: 24,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

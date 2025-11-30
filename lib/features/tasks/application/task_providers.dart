@@ -19,30 +19,52 @@ final tasksProvider =
 // 3. Kategori filtresini yöneten StateProvider.
 final categoryFilterProvider = StateProvider<String>((ref) => 'Tümü');
 
-// 4. Filtrelenmiş görevleri gösteren provider.
+// 4. YENİ: Etiket filtresini yöneten StateProvider.
+final taskTagFilterProvider = StateProvider<String?>((ref) => null);
+
+// 5. Filtrelenmiş görevleri gösteren provider (kategori + etiket).
 final filteredTasksProvider = Provider<List<Task>>((ref) {
-  final filter = ref.watch(categoryFilterProvider);
+  final categoryFilter = ref.watch(categoryFilterProvider);
+  final tagFilter = ref.watch(taskTagFilterProvider);
   final tasksAsyncValue = ref.watch(tasksProvider);
 
-  // Sadece veri başarıyla yüklendiğinde filtreleme yap.
   return tasksAsyncValue.maybeWhen(
     data: (tasks) {
-      List<Task> filtered;
-      if (filter == 'Tümü') {
-        filtered = List.from(tasks);
-      } else {
-        filtered = tasks.where((task) => task.category == filter).toList();
+      List<Task> filtered = List.from(tasks);
+
+      // Kategori filtresi
+      if (categoryFilter != 'Tümü') {
+        filtered =
+            filtered.where((task) => task.category == categoryFilter).toList();
       }
-      filtered.sort((a, b) =>
-          a.isCompleted == b.isCompleted ? 0 : (a.isCompleted ? 1 : -1));
+
+      // Etiket filtresi
+      if (tagFilter != null && tagFilter.isNotEmpty) {
+        filtered =
+            filtered.where((task) => task.tags.contains(tagFilter)).toList();
+      }
+
+      // Sıralama: Tamamlanmamışlar üstte, sonra tarihe göre
+      filtered.sort((a, b) {
+        if (a.isCompleted != b.isCompleted) {
+          return a.isCompleted ? 1 : -1;
+        }
+        // Son tarihi olanlar önce
+        if (a.dueDate != null && b.dueDate != null) {
+          return a.dueDate!.compareTo(b.dueDate!);
+        }
+        if (a.dueDate != null) return -1;
+        if (b.dueDate != null) return 1;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
       return filtered;
     },
-    // Veri yoksa veya hata varsa boş liste göster.
     orElse: () => [],
   );
 });
 
-// 5. Görev istatistiklerini hesaplayan provider.
+// 6. Görev istatistiklerini hesaplayan provider.
 final taskStatsProvider = Provider<TaskStats>((ref) {
   final tasksAsyncValue = ref.watch(tasksProvider);
 
@@ -52,8 +74,49 @@ final taskStatsProvider = Provider<TaskStats>((ref) {
       final completed = tasks.where((task) => task.isCompleted).length;
       return TaskStats(totalTasks: total, completedTasks: completed);
     },
-    orElse: () =>
-        TaskStats(), // Yüklenirken veya hata durumunda varsayılan değer.
+    orElse: () => TaskStats(),
+  );
+});
+
+// 7. YENİ: Tüm benzersiz etiketleri gösteren provider.
+final allTaskTagsProvider = Provider<List<String>>((ref) {
+  final tasksAsyncValue = ref.watch(tasksProvider);
+
+  return tasksAsyncValue.maybeWhen(
+    data: (tasks) {
+      final tags = <String>{};
+      for (final task in tasks) {
+        tags.addAll(task.tags);
+      }
+      return tags.toList()..sort();
+    },
+    orElse: () => [],
+  );
+});
+
+// 8. YENİ: Bugünün görevlerini gösteren provider.
+final todayTasksProvider = Provider<List<Task>>((ref) {
+  final tasksAsyncValue = ref.watch(tasksProvider);
+
+  return tasksAsyncValue.maybeWhen(
+    data: (tasks) {
+      return tasks
+          .where((task) => task.isDueToday && !task.isCompleted)
+          .toList();
+    },
+    orElse: () => [],
+  );
+});
+
+// 9. YENİ: Gecikmiş görevleri gösteren provider.
+final overdueTasksProvider = Provider<List<Task>>((ref) {
+  final tasksAsyncValue = ref.watch(tasksProvider);
+
+  return tasksAsyncValue.maybeWhen(
+    data: (tasks) {
+      return tasks.where((task) => task.isOverdue).toList();
+    },
+    orElse: () => [],
   );
 });
 
@@ -75,15 +138,33 @@ class TasksNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     }
   }
 
-  Future<void> addTask(String title, String category) async {
+  Future<void> addTask(
+    String title,
+    String category, {
+    List<String> tags = const [],
+    DateTime? dueDate,
+  }) async {
     final newTask = Task(
       id: const Uuid().v4(),
       title: title,
       category: category,
+      tags: tags,
+      dueDate: dueDate,
     );
-    // Mevcut durumu al ve üzerine ekle.
     final previousState = state.value ?? [];
     final updatedList = [newTask, ...previousState];
+    state = AsyncData(updatedList);
+    await _repository.saveTasks(updatedList);
+  }
+
+  Future<void> updateTask(Task updatedTask) async {
+    final previousState = state.value ?? [];
+    final updatedList = previousState.map((task) {
+      if (task.id == updatedTask.id) {
+        return updatedTask;
+      }
+      return task;
+    }).toList();
     state = AsyncData(updatedList);
     await _repository.saveTasks(updatedList);
   }
@@ -103,6 +184,35 @@ class TasksNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> deleteTask(String id) async {
     final previousState = state.value ?? [];
     final updatedList = previousState.where((task) => task.id != id).toList();
+    state = AsyncData(updatedList);
+    await _repository.saveTasks(updatedList);
+  }
+
+  // YENİ: Göreve etiket ekleme
+  Future<void> addTagToTask(String taskId, String tag) async {
+    final previousState = state.value ?? [];
+    final updatedList = previousState.map((task) {
+      if (task.id == taskId && !task.tags.contains(tag)) {
+        final newTag = tag.startsWith('#') ? tag : '#$tag';
+        return task.copyWith(tags: [...task.tags, newTag]);
+      }
+      return task;
+    }).toList();
+    state = AsyncData(updatedList);
+    await _repository.saveTasks(updatedList);
+  }
+
+  // YENİ: Görevden etiket kaldırma
+  Future<void> removeTagFromTask(String taskId, String tag) async {
+    final previousState = state.value ?? [];
+    final updatedList = previousState.map((task) {
+      if (task.id == taskId) {
+        return task.copyWith(
+          tags: task.tags.where((t) => t != tag).toList(),
+        );
+      }
+      return task;
+    }).toList();
     state = AsyncData(updatedList);
     await _repository.saveTasks(updatedList);
   }
