@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:momo_ajanda/core/services/notification_service.dart';
 import 'package:momo_ajanda/features/reminders/application/reminder_providers.dart';
 import 'package:momo_ajanda/features/reminders/presentation/widgets/add_reminder_sheet.dart';
 import 'package:momo_ajanda/features/reminders/presentation/widgets/reminder_card.dart';
@@ -19,10 +20,26 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    // Tekrarlayan hatırlatıcıları kontrol et
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(remindersProvider.notifier).processRepeatingReminders();
+      _requestNotificationPermission();
     });
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    final granted = await NotificationService().requestPermission();
+    if (!granted && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Hatırlatıcılar için bildirim izni gerekli'),
+          action: SnackBarAction(
+            label: 'Tamam',
+            onPressed: () {},
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -51,7 +68,6 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen>
       appBar: AppBar(
         title: const Text('Hatırlatıcılar'),
         actions: [
-          // Etiket filtresi
           if (allTags.isNotEmpty)
             PopupMenuButton<String?>(
               icon: Badge(
@@ -106,11 +122,11 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen>
                 ],
               ),
             ),
-            Tab(
+            const Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Yaklaşan'),
+                  Text('Yaklaşan'),
                 ],
               ),
             ),
@@ -183,7 +199,6 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen>
   }
 }
 
-/// Bugünün hatırlatıcıları sekmesi
 class _TodayTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -201,7 +216,6 @@ class _TodayTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Gecikmiş hatırlatıcılar
         if (overdueReminders.isNotEmpty) ...[
           _SectionHeader(
             title: 'Gecikmiş',
@@ -211,8 +225,6 @@ class _TodayTab extends ConsumerWidget {
           ...overdueReminders.map((r) => ReminderCard(reminder: r)),
           const SizedBox(height: 16),
         ],
-
-        // Bugünün hatırlatıcıları
         if (todayReminders.isNotEmpty) ...[
           _SectionHeader(
             title: 'Bugün',
@@ -225,7 +237,6 @@ class _TodayTab extends ConsumerWidget {
   }
 }
 
-/// Yaklaşan hatırlatıcılar sekmesi
 class _UpcomingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -252,7 +263,6 @@ class _UpcomingTab extends ConsumerWidget {
   }
 }
 
-/// Tüm hatırlatıcılar sekmesi
 class _AllRemindersTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -269,7 +279,6 @@ class _AllRemindersTab extends ConsumerWidget {
       );
     }
 
-    // Aktif ve tamamlanmış olarak grupla
     final activeReminders =
         filteredReminders.where((r) => !r.isCompleted).toList();
     final completedReminders =
@@ -289,8 +298,6 @@ class _AllRemindersTab extends ConsumerWidget {
               },
             ),
           ),
-
-        // Aktif hatırlatıcılar
         if (activeReminders.isNotEmpty) ...[
           _SectionHeader(
             title: 'Aktif',
@@ -298,8 +305,6 @@ class _AllRemindersTab extends ConsumerWidget {
           ),
           ...activeReminders.map((r) => ReminderCard(reminder: r)),
         ],
-
-        // Tamamlanan hatırlatıcılar
         if (completedReminders.isNotEmpty) ...[
           const SizedBox(height: 16),
           _SectionHeader(
@@ -314,7 +319,6 @@ class _AllRemindersTab extends ConsumerWidget {
   }
 }
 
-/// Bölüm başlığı widget'ı
 class _SectionHeader extends StatelessWidget {
   final String title;
   final int count;
@@ -362,7 +366,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// Boş durum widget'ı
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;

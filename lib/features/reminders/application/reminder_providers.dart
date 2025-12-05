@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:momo_ajanda/core/services/notification_service.dart';
 import 'package:momo_ajanda/features/reminders/data/repositories/reminder_repository.dart';
 import 'package:momo_ajanda/features/reminders/models/reminder_model.dart';
 import 'package:uuid/uuid.dart';
@@ -35,7 +36,6 @@ final filteredRemindersProvider = Provider<List<Reminder>>((ref) {
             .toList();
       }
 
-      // Tamamlanmamışları üste, tarihe göre sırala
       filtered.sort((a, b) {
         if (a.isCompleted != b.isCompleted) {
           return a.isCompleted ? 1 : -1;
@@ -159,6 +159,7 @@ class ReminderStats {
 // STATE NOTIFIER
 class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
   final ReminderRepository _repository;
+  final NotificationService _notificationService = NotificationService();
 
   RemindersNotifier(this._repository) : super(const AsyncLoading()) {
     loadReminders();
@@ -169,6 +170,13 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
       state = const AsyncLoading();
       final reminders = await _repository.loadReminders();
       state = AsyncData(reminders);
+
+      // Mevcut hatırlatıcılar için bildirimleri zamanla
+      for (final reminder in reminders) {
+        if (!reminder.isCompleted && !reminder.isOverdue) {
+          await _scheduleNotification(reminder);
+        }
+      }
     } catch (e, stack) {
       state = AsyncError(e, stack);
     }
@@ -200,13 +208,36 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
 
     final previousState = state.value ?? [];
     final updatedList = [...previousState, newReminder];
-    // Tarihe göre sırala
     updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
     state = AsyncData(updatedList);
     await _repository.saveReminders(updatedList);
+
+    // Bildirim zamanla
+    await _scheduleNotification(newReminder);
+  }
+
+  Future<void> _scheduleNotification(Reminder reminder) async {
+    final notificationTime = reminder.dateTime.subtract(
+      Duration(minutes: reminder.minutesBefore),
+    );
+
+    if (notificationTime.isAfter(DateTime.now())) {
+      await _notificationService.scheduleNotification(
+        id: NotificationIdGenerator.fromString(reminder.id),
+        title: '🔔 ${reminder.title}',
+        body: reminder.description ?? 'Hatırlatıcı zamanı geldi!',
+        scheduledDate: notificationTime,
+        payload: reminder.id,
+      );
+    }
   }
 
   Future<void> updateReminder(Reminder updatedReminder) async {
+    // Eski bildirimi iptal et
+    await _notificationService.cancelNotification(
+      NotificationIdGenerator.fromString(updatedReminder.id),
+    );
+
     final previousState = state.value ?? [];
     final updatedList = previousState.map((reminder) {
       if (reminder.id == updatedReminder.id) {
@@ -218,6 +249,11 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
     updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
     state = AsyncData(updatedList);
     await _repository.saveReminders(updatedList);
+
+    // Yeni bildirimi zamanla
+    if (!updatedReminder.isCompleted) {
+      await _scheduleNotification(updatedReminder);
+    }
   }
 
   Future<void> toggleReminderStatus(String id) async {
@@ -230,9 +266,24 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
     }).toList();
     state = AsyncData(updatedList);
     await _repository.saveReminders(updatedList);
+
+    // Tamamlandıysa bildirimi iptal et
+    final reminder = updatedList.firstWhere((r) => r.id == id);
+    if (reminder.isCompleted) {
+      await _notificationService.cancelNotification(
+        NotificationIdGenerator.fromString(id),
+      );
+    } else {
+      await _scheduleNotification(reminder);
+    }
   }
 
   Future<void> deleteReminder(String id) async {
+    // Bildirimi iptal et
+    await _notificationService.cancelNotification(
+      NotificationIdGenerator.fromString(id),
+    );
+
     final previousState = state.value ?? [];
     final updatedList =
         previousState.where((reminder) => reminder.id != id).toList();
@@ -266,7 +317,6 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
     await _repository.saveReminders(updatedList);
   }
 
-  /// Gecikmiş tekrarlayan hatırlatıcıları yeni tarihe taşı
   Future<void> processRepeatingReminders() async {
     final previousState = state.value ?? [];
     final now = DateTime.now();
@@ -319,6 +369,13 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
       updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
       state = AsyncData(updatedList);
       await _repository.saveReminders(updatedList);
+
+      // Güncellenmiş hatırlatıcılar için bildirimleri yeniden zamanla
+      for (final reminder in updatedList) {
+        if (!reminder.isCompleted && !reminder.isOverdue) {
+          await _scheduleNotification(reminder);
+        }
+      }
     }
   }
 }

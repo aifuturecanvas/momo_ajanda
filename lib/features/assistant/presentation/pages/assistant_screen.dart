@@ -1,127 +1,247 @@
 import 'package:flutter/material.dart';
-import '../../models/chat_message_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:math' as math;
+import 'package:momo_ajanda/features/assistant/presentation/widgets/momo/momo_enums.dart';
+import 'package:momo_ajanda/features/assistant/presentation/widgets/momo/momo_actor.dart';
+import 'package:momo_ajanda/features/assistant/presentation/widgets/momo/momo_painter.dart';
+import 'package:momo_ajanda/features/tasks/application/task_providers.dart';
+import 'package:momo_ajanda/features/reminders/application/reminder_providers.dart';
 
-class AssistantScreen extends StatefulWidget {
+final momoMoodProvider = StateProvider<MomoMood>((ref) => MomoMood.idle);
+final momoIntensityProvider = StateProvider<double>((ref) => 0.5);
+
+class AssistantScreen extends ConsumerStatefulWidget {
   const AssistantScreen({super.key});
 
   @override
-  State<AssistantScreen> createState() => _AssistantScreenState();
+  ConsumerState<AssistantScreen> createState() => _AssistantScreenState();
 }
 
-class _AssistantScreenState extends State<AssistantScreen> {
-  final _messageController = TextEditingController();
-  final List<ChatMessage> _messages = [
-    ChatMessage(
-        text: 'Merhaba! Ben Momo. Sana nasıl yardımcı olabilirim?',
-        isUser: false),
-  ];
-
-  void _sendMessage() {
-    final text = _messageController.text;
-    if (text.isEmpty) return; // Boş mesaj gönderme
-
-    setState(() {
-      // Önce kullanıcının mesajını ekle
-      _messages.insert(0, ChatMessage(text: text, isUser: true));
-      // Sonra Momo'nun basit cevabını ekle
-      _messages.insert(0,
-          ChatMessage(text: 'Bu özelliği yakında öğreneceğim!', isUser: false));
-    });
-
-    _messageController.clear(); // Mesaj alanını temizle
-  }
+class _AssistantScreenState extends ConsumerState<AssistantScreen> {
+  bool _isSpeaking = false;
+  double _audioLevel = 0.0;
 
   @override
-  void dispose() {
-    _messageController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateMomoState();
+    });
+  }
+
+  void _updateMomoState() {
+    final hour = DateTime.now().hour;
+    final tasksAsync = ref.read(tasksProvider);
+    final remindersAsync = ref.read(remindersProvider);
+
+    final completedTasks = tasksAsync.maybeWhen(
+      data: (tasks) => tasks.where((t) => t.isCompleted).length,
+      orElse: () => 0,
+    );
+    final totalTasks = tasksAsync.maybeWhen(
+      data: (tasks) => tasks.length,
+      orElse: () => 0,
+    );
+    final overdueReminders = remindersAsync.maybeWhen(
+      data: (reminders) => reminders.where((r) => r.isOverdue).length,
+      orElse: () => 0,
+    );
+
+    MomoMood mood;
+    double intensity = 0.5;
+
+    if (hour >= 22 || hour < 6) {
+      mood = MomoMood.idle;
+      intensity = 0.3;
+    } else if (overdueReminders > 0) {
+      mood = MomoMood.sad;
+      intensity = 0.7;
+    } else if (totalTasks > 0 && completedTasks == totalTasks) {
+      mood = MomoMood.celebrate;
+      intensity = 1.0;
+    } else if (hour >= 6 && hour < 12) {
+      mood = MomoMood.happy;
+      intensity = 0.6;
+    } else if (hour >= 12 && hour < 18) {
+      mood = MomoMood.idle;
+      intensity = 0.5;
+    } else {
+      mood = MomoMood.thinking;
+      intensity = 0.5;
+    }
+
+    ref.read(momoMoodProvider.notifier).state = mood;
+    ref.read(momoIntensityProvider.notifier).state = intensity;
+  }
+
+  void _simulateAudioInput() {
+    if (!_isSpeaking) return;
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted && _isSpeaking) {
+        setState(() => _audioLevel = math.Random().nextDouble());
+        _simulateAudioInput();
+      }
+    });
+  }
+
+  void _handleMomoTap() {
+    final currentMood = ref.read(momoMoodProvider);
+    if (currentMood == MomoMood.listening) return;
+
+    if (currentMood == MomoMood.angry) {
+      ref.read(momoIntensityProvider.notifier).state = 1.0;
+    } else {
+      ref.read(momoMoodProvider.notifier).state = MomoMood.happy;
+      ref.read(momoIntensityProvider.notifier).state = 0.8;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final mood = ref.watch(momoMoodProvider);
+    final intensity = ref.watch(momoIntensityProvider);
+
+    Color targetBg = Color.lerp(Colors.white, mood.bgColor, 0.3 + intensity * 0.7)!;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Momo Asistan'),
-      ),
-      body: Column(
+      backgroundColor: targetBg,
+      body: Stack(
         children: [
-          // Sohbet balonlarının listelendiği alan
-          Expanded(
-            child: ListView.builder(
-              reverse:
-                  true, // Listeyi aşağıdan yukarı doğru gösterir (sohbet uygulamaları gibi)
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _buildMessageBubble(message);
+          // Arka plan
+          Positioned.fill(
+            child: CustomPaint(
+              painter: AdvancedBackgroundPainter(
+                color: mood.accentColor,
+                intensity: intensity,
+                isListening: mood == MomoMood.listening,
+              ),
+            ),
+          ),
+
+          // Momo karakteri
+          Center(
+            child: MomoActor(
+              mood: mood,
+              intensity: intensity,
+              isSpeaking: _isSpeaking,
+              simulatedAudioLevel: _audioLevel,
+              onTap: _handleMomoTap,
+            ),
+          ),
+
+          // Kontrol paneli
+          Positioned(
+            bottom: 20,
+            left: 20,
+            right: 20,
+            child: _buildControlPanel(mood, intensity),
+          ),
+
+          // Mikrofon butonu
+          Positioned(
+            top: 50,
+            right: 20,
+            child: FloatingActionButton.small(
+              backgroundColor: _isSpeaking ? Colors.red : Colors.blue,
+              child: Icon(_isSpeaking ? Icons.mic_off : Icons.mic),
+              onPressed: () {
+                setState(() {
+                  _isSpeaking = !_isSpeaking;
+                  if (_isSpeaking) {
+                    ref.read(momoMoodProvider.notifier).state = MomoMood.listening;
+                    _simulateAudioInput();
+                  } else {
+                    ref.read(momoMoodProvider.notifier).state = MomoMood.idle;
+                    _audioLevel = 0.0;
+                  }
+                });
               },
             ),
           ),
-          // Yazı yazma alanı
-          _buildMessageInput(),
         ],
       ),
     );
   }
 
-  // Tek bir sohbet baloncuğunu oluşturan widget
-  Widget _buildMessageBubble(ChatMessage message) {
-    final isUser = message.isUser;
-    return Align(
-      // Kullanıcı mesajları sağa, Momo'nun mesajları sola yaslanacak
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4.0),
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-        decoration: BoxDecoration(
-          color: isUser ? Theme.of(context).primaryColor : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20).copyWith(
-            bottomRight:
-                isUser ? const Radius.circular(4) : const Radius.circular(20),
-            bottomLeft:
-                !isUser ? const Radius.circular(4) : const Radius.circular(20),
-          ),
-        ),
-        child: Text(
-          message.text,
-          style: TextStyle(color: isUser ? Colors.white : Colors.black87),
-        ),
-      ),
-    );
-  }
-
-  // Alttaki metin giriş alanını oluşturan widget
-  Widget _buildMessageInput() {
+  Widget _buildControlPanel(MomoMood currentMood, double currentIntensity) {
     return Container(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            offset: const Offset(0, -1),
-            blurRadius: 4,
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black12,
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              decoration: const InputDecoration(
-                hintText: 'Momo\'ya bir şey sor...',
-                border: InputBorder.none,
-                filled: false,
+          // Yoğunluk slider
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "YOĞUNLUK: %${(currentIntensity * 100).toInt()}",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
-              onSubmitted: (value) => _sendMessage(),
-            ),
+              SizedBox(
+                width: 150,
+                child: Slider(
+                  value: currentIntensity,
+                  min: 0.0,
+                  max: 1.0,
+                  activeColor: currentMood.accentColor,
+                  onChanged: (v) {
+                    ref.read(momoIntensityProvider.notifier).state = v;
+                  },
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.send),
-            onPressed: _sendMessage,
-            color: Theme.of(context).primaryColor,
+          const SizedBox(height: 10),
+
+          // Mood butonları
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: MomoMood.values.map((m) {
+              bool active = m == currentMood;
+              return GestureDetector(
+                onTap: () {
+                  ref.read(momoMoodProvider.notifier).state = m;
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: active ? m.accentColor : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: m.accentColor.withOpacity(0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Text(
+                    m.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: active ? Colors.white : Colors.black54,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),

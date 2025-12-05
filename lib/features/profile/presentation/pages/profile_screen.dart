@@ -1,166 +1,194 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:momo_ajanda/features/achievements/application/achievement_providers.dart';
+import 'package:momo_ajanda/features/achievements/presentation/pages/achievements_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Temadan renkleri ve stilleri daha kolay erişim için alıyoruz.
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final level = ref.watch(userLevelProvider);
+    final totalXp = ref.watch(totalXpProvider);
+    final unlockedCount = ref.watch(unlockedCountProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil ve Ayarlar'),
+        title: const Text('Profil'),
       ),
       body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          // === KULLANICI BİLGİLERİ KARTI ===
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.grey.shade200,
-                  child: const Icon(
-                    Icons.person,
-                    size: 50,
-                    color: Colors.grey,
+          // Kullanıcı kartı
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  // Avatar
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).primaryColor,
+                          Theme.of(context).primaryColor.withOpacity(0.6),
+                        ],
+                      ),
+                    ),
+                    child: const Center(
+                      child: Text('👤', style: TextStyle(fontSize: 40)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Kullanıcı Adı',
-                      style: textTheme.titleLarge,
+                  const SizedBox(height: 16),
+
+                  // Seviye
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'kullanici@momoajanda.com',
-                      style: textTheme.bodyMedium
-                          ?.copyWith(color: Colors.grey.shade600),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    const SizedBox(height: 4),
-                    // Premium Etiketi
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'PREMIUM',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Seviye ${level.level}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '• ${level.title}',
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$totalXp XP',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+          const SizedBox(height: 16),
 
-          const Divider(height: 1),
-
-          // === AYARLAR LİSTESİ ===
-          _buildSectionTitle(context, 'Genel'),
-          _buildSettingsTile(
-            context,
-            icon: Icons.settings_outlined,
-            title: 'Genel Ayarlar',
-            subtitle: 'Haftanın ilk günü, saat formatı...',
-            onTap: () {},
-          ),
-          _buildSettingsTile(
-            context,
-            icon: Icons.palette_outlined,
-            title: 'Tema & Görünüm',
-            subtitle: 'Açık/Koyu mod, defter stilleri...',
-            onTap: () {},
-          ),
-          _buildSettingsTile(
-            context,
-            icon: Icons.language_outlined,
-            title: 'Dil & Bölge',
-            subtitle: 'Uygulama dili, resmi tatiller...',
-            onTap: () {},
+          // Başarılar butonu
+          _ProfileMenuItem(
+            icon: Icons.emoji_events,
+            iconColor: Colors.amber,
+            title: 'Başarılar',
+            subtitle: '$unlockedCount rozet açıldı',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AchievementsScreen(),
+                ),
+              );
+            },
           ),
 
-          _buildSectionTitle(context, 'Bildirimler'),
-          _buildSettingsTile(
-            context,
-            icon: Icons.notifications_outlined,
-            title: 'Bildirim Ayarları',
-            subtitle: 'Etkinlik, görev ve özet hatırlatmaları',
-            onTap: () {},
-          ),
-          _buildSettingsTile(
-            context,
-            icon: Icons.smart_toy_outlined,
-            title: 'Momo Asistan Ayarları',
-            subtitle: 'Sesli yanıt, proaktif öneriler...',
-            onTap: () {},
+          // Diğer menü öğeleri
+          _ProfileMenuItem(
+            icon: Icons.settings,
+            iconColor: Colors.grey,
+            title: 'Ayarlar',
+            subtitle: 'Uygulama ayarları',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Ayarlar yakında!')),
+              );
+            },
           ),
 
-          _buildSectionTitle(context, 'Hesap & Veri'),
-          _buildSettingsTile(
-            context,
-            icon: Icons.security_outlined,
-            title: 'Güvenlik',
-            subtitle: 'Uygulama kilidi, 2FA...',
-            onTap: () {},
+          _ProfileMenuItem(
+            icon: Icons.help_outline,
+            iconColor: Colors.blue,
+            title: 'Yardım',
+            subtitle: 'SSS ve destek',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Yardım yakında!')),
+              );
+            },
           ),
-          _buildSettingsTile(
-            context,
-            icon: Icons.cloud_sync_outlined,
-            title: 'Veri & Yedekleme',
-            subtitle: 'Senkronizasyon, dışa aktarma...',
-            onTap: () {},
-          ),
-          _buildSettingsTile(
-            context,
+
+          _ProfileMenuItem(
             icon: Icons.info_outline,
+            iconColor: Colors.teal,
             title: 'Hakkında',
-            subtitle: 'Uygulama sürümü, lisanslar...',
-            onTap: () {},
+            subtitle: 'Momo Ajanda v1.0.0',
+            onTap: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'Momo Ajanda',
+                applicationVersion: '1.0.0',
+                applicationIcon:
+                    const Text('📓', style: TextStyle(fontSize: 48)),
+                children: [
+                  const Text('Akıllı ajanda ve üretkenlik uygulamanız.'),
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
+}
 
-  // Ayar listesi elemanlarını oluşturan yardımcı bir fonksiyon. Kod tekrarını önler.
-  Widget _buildSettingsTile(BuildContext context,
-      {required IconData icon,
-      required String title,
-      required String subtitle,
-      required VoidCallback onTap}) {
-    return ListTile(
-      leading: Icon(icon, color: Theme.of(context).primaryColor),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-      onTap: onTap,
-    );
-  }
+class _ProfileMenuItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 
-  // Bölüm başlıklarını oluşturan yardımcı bir fonksiyon.
-  Widget _buildSectionTitle(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 8.0),
-      child: Text(
-        title.toUpperCase(),
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.bold,
-            ),
+  const _ProfileMenuItem({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: iconColor),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }
