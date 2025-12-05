@@ -263,10 +263,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_tasks',
         onPressed: _showAddTaskSheet,
-        icon: const Icon(Icons.add),
-        label: const Text('Görev Ekle'),
+        child: const Icon(Icons.add),
       ),
     );
   }

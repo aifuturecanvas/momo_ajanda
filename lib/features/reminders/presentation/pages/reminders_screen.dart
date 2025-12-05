@@ -172,7 +172,8 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen>
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+     floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_reminders',
         onPressed: _showAddReminderSheet,
         icon: const Icon(Icons.add_alarm),
         label: const Text('Hatırlatıcı'),

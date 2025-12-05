@@ -155,6 +155,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_agenda',
         onPressed: () => _showAddEntrySheet(selectedDate),
         backgroundColor: theme.bindingColor,
         child: const Icon(Icons.add, color: Colors.white),

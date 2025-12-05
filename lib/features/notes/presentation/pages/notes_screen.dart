@@ -44,6 +44,7 @@ class NotesScreen extends ConsumerWidget {
         error: (err, stack) => Center(child: Text('Hata: ${err.toString()}')),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_notes',
         onPressed: () => _navigateToDetail(context),
         child: const Icon(Icons.add),
       ),
