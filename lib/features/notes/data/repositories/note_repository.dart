@@ -1,32 +1,59 @@
-import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:momo_ajanda/core/services/supabase_service.dart';
 import 'package:momo_ajanda/features/notes/models/note_model.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-// Bu sınıf, not verilerini kaydetme ve yükleme işlerinden sorumludur.
+/// Bu sınıf, not verilerini Supabase'de kaydetme ve yükleme işlerinden sorumludur.
 class NoteRepository {
-  final _storageKey = 'notes_data';
+  final SupabaseService _supabase = SupabaseService();
 
-  // Verilen not listesini yerel depolamaya kaydeder.
-  Future<void> saveNotes(List<Note> notes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<Map<String, dynamic>> notesAsMap =
-        notes.map((note) => note.toJson()).toList();
-    await prefs.setString(_storageKey, jsonEncode(notesAsMap));
-  }
-
-  // Yerel depolamadan not listesini yükler.
+  /// Kullanıcının tüm notlarını Supabase'den yükler
   Future<List<Note>> loadNotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? notesString = prefs.getString(_storageKey);
-
-    if (notesString != null && notesString.isNotEmpty) {
-      final List<dynamic> decodedData = jsonDecode(notesString);
-      // Kayıtlı veriyi tarihe göre en yeniden eskiye doğru sıralayarak döndür.
-      final notes = decodedData.map((item) => Note.fromJson(item)).toList();
+    try {
+      final data = await _supabase.getNotes();
+      final notes = data.map((json) => Note.fromJson(json)).toList();
+      // Tarihe göre en yeniden eskiye doğru sırala
       notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return notes;
+    } catch (e) {
+      debugPrint('NoteRepository.loadNotes hatası: $e');
+      return [];
     }
-    // Eğer kayıtlı veri yoksa boş bir liste döndür.
-    return [];
+  }
+
+  /// Yeni not ekler
+  Future<void> addNote(Note note) async {
+    try {
+      await _supabase.addNote(note.toJson());
+    } catch (e) {
+      debugPrint('NoteRepository.addNote hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// Notu günceller
+  Future<void> updateNote(Note note) async {
+    try {
+      await _supabase.updateNote(note.id, note.toJson());
+    } catch (e) {
+      debugPrint('NoteRepository.updateNote hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// Notu siler
+  Future<void> deleteNote(String id) async {
+    try {
+      await _supabase.deleteNote(id);
+    } catch (e) {
+      debugPrint('NoteRepository.deleteNote hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// DEPRECATED: Artık kullanılmıyor - Supabase ile tek tek işlemler yapılıyor
+  @Deprecated('Supabase ile direkt işlem yapıldığı için gerekli değil')
+  Future<void> saveNotes(List<Note> notes) async {
+    // Bu method artık kullanılmıyor
+    debugPrint('⚠️ saveNotes() deprecated - Supabase kullanın');
   }
 }

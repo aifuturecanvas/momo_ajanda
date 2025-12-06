@@ -156,7 +156,7 @@ class ReminderStats {
   double get completionRate => total == 0 ? 0 : completed / total;
 }
 
-// STATE NOTIFIER
+// STATE NOTIFIER - Supabase entegre edilmiş versiyon
 class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
   final ReminderRepository _repository;
   final NotificationService _notificationService = NotificationService();
@@ -193,27 +193,36 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
     String? linkedTaskId,
     int minutesBefore = 15,
   }) async {
-    final newReminder = Reminder(
-      id: const Uuid().v4(),
-      title: title,
-      description: description,
-      dateTime: dateTime,
-      priority: priority,
-      repeat: repeat,
-      tags: tags,
-      linkedEventId: linkedEventId,
-      linkedTaskId: linkedTaskId,
-      minutesBefore: minutesBefore,
-    );
+    try {
+      final newReminder = Reminder(
+        id: const Uuid().v4(),
+        title: title,
+        description: description,
+        dateTime: dateTime,
+        priority: priority,
+        repeat: repeat,
+        tags: tags,
+        linkedEventId: linkedEventId,
+        linkedTaskId: linkedTaskId,
+        minutesBefore: minutesBefore,
+      );
 
-    final previousState = state.value ?? [];
-    final updatedList = [...previousState, newReminder];
-    updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-    state = AsyncData(updatedList);
-    await _repository.saveReminders(updatedList);
+      // Önce Supabase'e ekle
+      await _repository.addReminder(newReminder);
 
-    // Bildirim zamanla
-    await _scheduleNotification(newReminder);
+      // Başarılı olursa state'i güncelle
+      final previousState = state.value ?? [];
+      final updatedList = [...previousState, newReminder];
+      updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      state = AsyncData(updatedList);
+
+      // Bildirim zamanla
+      await _scheduleNotification(newReminder);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
+    }
   }
 
   Future<void> _scheduleNotification(Reminder reminder) async {
@@ -233,149 +242,217 @@ class RemindersNotifier extends StateNotifier<AsyncValue<List<Reminder>>> {
   }
 
   Future<void> updateReminder(Reminder updatedReminder) async {
-    // Eski bildirimi iptal et
-    await _notificationService.cancelNotification(
-      NotificationIdGenerator.fromString(updatedReminder.id),
-    );
+    try {
+      // Eski bildirimi iptal et
+      await _notificationService.cancelNotification(
+        NotificationIdGenerator.fromString(updatedReminder.id),
+      );
 
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((reminder) {
-      if (reminder.id == updatedReminder.id) {
-        return updatedReminder;
+      // Önce Supabase'de güncelle
+      await _repository.updateReminder(updatedReminder);
+
+      // Başarılı olursa state'i güncelle
+      final previousState = state.value ?? [];
+      final updatedList = previousState.map((reminder) {
+        if (reminder.id == updatedReminder.id) {
+          return updatedReminder;
+        }
+        return reminder;
+      }).toList();
+
+      updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      state = AsyncData(updatedList);
+
+      // Yeni bildirimi zamanla
+      if (!updatedReminder.isCompleted) {
+        await _scheduleNotification(updatedReminder);
       }
-      return reminder;
-    }).toList();
-
-    updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-    state = AsyncData(updatedList);
-    await _repository.saveReminders(updatedList);
-
-    // Yeni bildirimi zamanla
-    if (!updatedReminder.isCompleted) {
-      await _scheduleNotification(updatedReminder);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
     }
   }
 
   Future<void> toggleReminderStatus(String id) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((reminder) {
-      if (reminder.id == id) {
-        return reminder.copyWith(isCompleted: !reminder.isCompleted);
-      }
-      return reminder;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveReminders(updatedList);
+    try {
+      final previousState = state.value ?? [];
+      final reminder = previousState.firstWhere((r) => r.id == id);
+      final updatedReminder = reminder.copyWith(isCompleted: !reminder.isCompleted);
 
-    // Tamamlandıysa bildirimi iptal et
-    final reminder = updatedList.firstWhere((r) => r.id == id);
-    if (reminder.isCompleted) {
-      await _notificationService.cancelNotification(
-        NotificationIdGenerator.fromString(id),
-      );
-    } else {
-      await _scheduleNotification(reminder);
+      // Önce Supabase'de güncelle
+      await _repository.updateReminder(updatedReminder);
+
+      // Başarılı olursa state'i güncelle
+      final updatedList = previousState.map((r) {
+        if (r.id == id) {
+          return updatedReminder;
+        }
+        return r;
+      }).toList();
+      state = AsyncData(updatedList);
+
+      // Tamamlandıysa bildirimi iptal et
+      if (updatedReminder.isCompleted) {
+        await _notificationService.cancelNotification(
+          NotificationIdGenerator.fromString(id),
+        );
+      } else {
+        await _scheduleNotification(updatedReminder);
+      }
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
     }
   }
 
   Future<void> deleteReminder(String id) async {
-    // Bildirimi iptal et
-    await _notificationService.cancelNotification(
-      NotificationIdGenerator.fromString(id),
-    );
+    try {
+      // Bildirimi iptal et
+      await _notificationService.cancelNotification(
+        NotificationIdGenerator.fromString(id),
+      );
 
-    final previousState = state.value ?? [];
-    final updatedList =
-        previousState.where((reminder) => reminder.id != id).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveReminders(updatedList);
+      // Önce Supabase'den sil
+      await _repository.deleteReminder(id);
+
+      // Başarılı olursa state'i güncelle
+      final previousState = state.value ?? [];
+      final updatedList =
+          previousState.where((reminder) => reminder.id != id).toList();
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
+    }
   }
 
   Future<void> addTagToReminder(String id, String tag) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((reminder) {
-      if (reminder.id == id && !reminder.tags.contains(tag)) {
-        return reminder.copyWith(tags: [...reminder.tags, tag]);
+    try {
+      final previousState = state.value ?? [];
+      final reminder = previousState.firstWhere((r) => r.id == id);
+
+      if (!reminder.tags.contains(tag)) {
+        final updatedReminder = reminder.copyWith(tags: [...reminder.tags, tag]);
+
+        // Önce Supabase'de güncelle
+        await _repository.updateReminder(updatedReminder);
+
+        // Başarılı olursa state'i güncelle
+        final updatedList = previousState.map((r) {
+          if (r.id == id) {
+            return updatedReminder;
+          }
+          return r;
+        }).toList();
+        state = AsyncData(updatedList);
       }
-      return reminder;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveReminders(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
+    }
   }
 
   Future<void> removeTagFromReminder(String id, String tag) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((reminder) {
-      if (reminder.id == id) {
-        return reminder.copyWith(
-          tags: reminder.tags.where((t) => t != tag).toList(),
-        );
-      }
-      return reminder;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveReminders(updatedList);
+    try {
+      final previousState = state.value ?? [];
+      final reminder = previousState.firstWhere((r) => r.id == id);
+      final updatedReminder = reminder.copyWith(
+        tags: reminder.tags.where((t) => t != tag).toList(),
+      );
+
+      // Önce Supabase'de güncelle
+      await _repository.updateReminder(updatedReminder);
+
+      // Başarılı olursa state'i güncelle
+      final updatedList = previousState.map((r) {
+        if (r.id == id) {
+          return updatedReminder;
+        }
+        return r;
+      }).toList();
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
+    }
   }
 
   Future<void> processRepeatingReminders() async {
-    final previousState = state.value ?? [];
-    final now = DateTime.now();
-    bool hasChanges = false;
+    try {
+      final previousState = state.value ?? [];
+      final now = DateTime.now();
+      bool hasChanges = false;
 
-    final updatedList = previousState.map((reminder) {
-      if (reminder.isOverdue &&
-          !reminder.isCompleted &&
-          reminder.repeat != ReminderRepeat.none) {
-        hasChanges = true;
-        DateTime newDate = reminder.dateTime;
+      final updatedList = <Reminder>[];
 
-        while (newDate.isBefore(now)) {
-          switch (reminder.repeat) {
-            case ReminderRepeat.daily:
-              newDate = newDate.add(const Duration(days: 1));
-              break;
-            case ReminderRepeat.weekly:
-              newDate = newDate.add(const Duration(days: 7));
-              break;
-            case ReminderRepeat.monthly:
-              newDate = DateTime(
-                newDate.year,
-                newDate.month + 1,
-                newDate.day,
-                newDate.hour,
-                newDate.minute,
-              );
-              break;
-            case ReminderRepeat.yearly:
-              newDate = DateTime(
-                newDate.year + 1,
-                newDate.month,
-                newDate.day,
-                newDate.hour,
-                newDate.minute,
-              );
-              break;
-            case ReminderRepeat.none:
-              break;
+      for (final reminder in previousState) {
+        if (reminder.isOverdue &&
+            !reminder.isCompleted &&
+            reminder.repeat != ReminderRepeat.none) {
+          hasChanges = true;
+          DateTime newDate = reminder.dateTime;
+
+          while (newDate.isBefore(now)) {
+            switch (reminder.repeat) {
+              case ReminderRepeat.daily:
+                newDate = newDate.add(const Duration(days: 1));
+                break;
+              case ReminderRepeat.weekly:
+                newDate = newDate.add(const Duration(days: 7));
+                break;
+              case ReminderRepeat.monthly:
+                newDate = DateTime(
+                  newDate.year,
+                  newDate.month + 1,
+                  newDate.day,
+                  newDate.hour,
+                  newDate.minute,
+                );
+                break;
+              case ReminderRepeat.yearly:
+                newDate = DateTime(
+                  newDate.year + 1,
+                  newDate.month,
+                  newDate.day,
+                  newDate.hour,
+                  newDate.minute,
+                );
+                break;
+              case ReminderRepeat.none:
+                break;
+            }
+          }
+
+          final updatedReminder = reminder.copyWith(dateTime: newDate);
+          updatedList.add(updatedReminder);
+
+          // Supabase'de güncelle
+          await _repository.updateReminder(updatedReminder);
+        } else {
+          updatedList.add(reminder);
+        }
+      }
+
+      if (hasChanges) {
+        updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+        state = AsyncData(updatedList);
+
+        // Güncellenmiş hatırlatıcılar için bildirimleri yeniden zamanla
+        for (final reminder in updatedList) {
+          if (!reminder.isCompleted && !reminder.isOverdue) {
+            await _scheduleNotification(reminder);
           }
         }
-
-        return reminder.copyWith(dateTime: newDate);
       }
-      return reminder;
-    }).toList();
-
-    if (hasChanges) {
-      updatedList.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-      state = AsyncData(updatedList);
-      await _repository.saveReminders(updatedList);
-
-      // Güncellenmiş hatırlatıcılar için bildirimleri yeniden zamanla
-      for (final reminder in updatedList) {
-        if (!reminder.isCompleted && !reminder.isOverdue) {
-          await _scheduleNotification(reminder);
-        }
-      }
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadReminders();
+      rethrow;
     }
   }
 }

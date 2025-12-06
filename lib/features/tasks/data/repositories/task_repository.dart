@@ -1,25 +1,56 @@
-import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:momo_ajanda/core/services/supabase_service.dart';
 import 'package:momo_ajanda/features/tasks/models/task_model.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-// Bu sınıf, görev verilerini kaydetme ve yükleme işlerinden sorumludur.
+/// Bu sınıf, görev verilerini Supabase'de kaydetme ve yükleme işlerinden sorumludur.
 class TaskRepository {
-  final _storageKey = 'tasks_data';
+  final SupabaseService _supabase = SupabaseService();
 
-  Future<void> saveTasks(List<Task> tasks) async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<Map<String, dynamic>> tasksAsMap =
-        tasks.map((task) => task.toJson()).toList();
-    await prefs.setString(_storageKey, jsonEncode(tasksAsMap));
+  /// Kullanıcının tüm görevlerini Supabase'den yükler
+  Future<List<Task>> loadTasks() async {
+    try {
+      final data = await _supabase.getTasks();
+      return data.map((json) => Task.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint('TaskRepository.loadTasks hatası: $e');
+      return [];
+    }
   }
 
-  Future<List<Task>> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? tasksString = prefs.getString(_storageKey);
-    if (tasksString != null && tasksString.isNotEmpty) {
-      final List<dynamic> decodedData = jsonDecode(tasksString);
-      return decodedData.map((item) => Task.fromJson(item)).toList();
+  /// Yeni görev ekler (tek task için)
+  Future<void> addTask(Task task) async {
+    try {
+      await _supabase.addTask(task.toJson());
+    } catch (e) {
+      debugPrint('TaskRepository.addTask hatası: $e');
+      rethrow;
     }
-    return []; // Veri yoksa boş liste döndür.
+  }
+
+  /// Görevi günceller
+  Future<void> updateTask(Task task) async {
+    try {
+      await _supabase.updateTask(task.id, task.toJson());
+    } catch (e) {
+      debugPrint('TaskRepository.updateTask hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// Görevi siler
+  Future<void> deleteTask(String id) async {
+    try {
+      await _supabase.deleteTask(id);
+    } catch (e) {
+      debugPrint('TaskRepository.deleteTask hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// DEPRECATED: Artık kullanılmıyor - Supabase ile tek tek işlemler yapılıyor
+  @Deprecated('Supabase ile direkt işlem yapıldığı için gerekli değil')
+  Future<void> saveTasks(List<Task> tasks) async {
+    // Bu method artık kullanılmıyor
+    debugPrint('⚠️ saveTasks() deprecated - Supabase kullanın');
   }
 }

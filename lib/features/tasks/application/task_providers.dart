@@ -120,7 +120,7 @@ final overdueTasksProvider = Provider<List<Task>>((ref) {
   );
 });
 
-// STATE NOTIFIER
+// STATE NOTIFIER - Supabase entegre edilmiş versiyon
 class TasksNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   final TaskRepository _repository;
 
@@ -144,76 +144,143 @@ class TasksNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     List<String> tags = const [],
     DateTime? dueDate,
   }) async {
-    final newTask = Task(
-      id: const Uuid().v4(),
-      title: title,
-      category: category,
-      tags: tags,
-      dueDate: dueDate,
-    );
-    final previousState = state.value ?? [];
-    final updatedList = [newTask, ...previousState];
-    state = AsyncData(updatedList);
-    await _repository.saveTasks(updatedList);
+    try {
+      final newTask = Task(
+        id: const Uuid().v4(),
+        title: title,
+        category: category,
+        tags: tags,
+        dueDate: dueDate,
+      );
+
+      // Önce Supabase'e ekle
+      await _repository.addTask(newTask);
+
+      // Başarılı olursa state'i güncelle
+      final previousState = state.value ?? [];
+      final updatedList = [newTask, ...previousState];
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadTasks();
+      rethrow;
+    }
   }
 
   Future<void> updateTask(Task updatedTask) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((task) {
-      if (task.id == updatedTask.id) {
-        return updatedTask;
-      }
-      return task;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveTasks(updatedList);
+    try {
+      // Önce Supabase'de güncelle
+      await _repository.updateTask(updatedTask);
+
+      // Başarılı olursa state'i güncelle
+      final previousState = state.value ?? [];
+      final updatedList = previousState.map((task) {
+        if (task.id == updatedTask.id) {
+          return updatedTask;
+        }
+        return task;
+      }).toList();
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadTasks();
+      rethrow;
+    }
   }
 
   Future<void> toggleTaskStatus(String id) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((task) {
-      if (task.id == id) {
-        return task.copyWith(isCompleted: !task.isCompleted);
-      }
-      return task;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveTasks(updatedList);
+    try {
+      final previousState = state.value ?? [];
+      final task = previousState.firstWhere((t) => t.id == id);
+      final updatedTask = task.copyWith(isCompleted: !task.isCompleted);
+
+      // Önce Supabase'de güncelle
+      await _repository.updateTask(updatedTask);
+
+      // Başarılı olursa state'i güncelle
+      final updatedList = previousState.map((task) {
+        if (task.id == id) {
+          return updatedTask;
+        }
+        return task;
+      }).toList();
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadTasks();
+      rethrow;
+    }
   }
 
   Future<void> deleteTask(String id) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.where((task) => task.id != id).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveTasks(updatedList);
+    try {
+      // Önce Supabase'den sil
+      await _repository.deleteTask(id);
+
+      // Başarılı olursa state'i güncelle
+      final previousState = state.value ?? [];
+      final updatedList = previousState.where((task) => task.id != id).toList();
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadTasks();
+      rethrow;
+    }
   }
 
   // YENİ: Göreve etiket ekleme
   Future<void> addTagToTask(String taskId, String tag) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((task) {
-      if (task.id == taskId && !task.tags.contains(tag)) {
+    try {
+      final previousState = state.value ?? [];
+      final task = previousState.firstWhere((t) => t.id == taskId);
+
+      if (!task.tags.contains(tag)) {
         final newTag = tag.startsWith('#') ? tag : '#$tag';
-        return task.copyWith(tags: [...task.tags, newTag]);
+        final updatedTask = task.copyWith(tags: [...task.tags, newTag]);
+
+        // Önce Supabase'de güncelle
+        await _repository.updateTask(updatedTask);
+
+        // Başarılı olursa state'i güncelle
+        final updatedList = previousState.map((t) {
+          if (t.id == taskId) {
+            return updatedTask;
+          }
+          return t;
+        }).toList();
+        state = AsyncData(updatedList);
       }
-      return task;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveTasks(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadTasks();
+      rethrow;
+    }
   }
 
   // YENİ: Görevden etiket kaldırma
   Future<void> removeTagFromTask(String taskId, String tag) async {
-    final previousState = state.value ?? [];
-    final updatedList = previousState.map((task) {
-      if (task.id == taskId) {
-        return task.copyWith(
-          tags: task.tags.where((t) => t != tag).toList(),
-        );
-      }
-      return task;
-    }).toList();
-    state = AsyncData(updatedList);
-    await _repository.saveTasks(updatedList);
+    try {
+      final previousState = state.value ?? [];
+      final task = previousState.firstWhere((t) => t.id == taskId);
+      final updatedTask = task.copyWith(
+        tags: task.tags.where((t) => t != tag).toList(),
+      );
+
+      // Önce Supabase'de güncelle
+      await _repository.updateTask(updatedTask);
+
+      // Başarılı olursa state'i güncelle
+      final updatedList = previousState.map((t) {
+        if (t.id == taskId) {
+          return updatedTask;
+        }
+        return t;
+      }).toList();
+      state = AsyncData(updatedList);
+    } catch (e) {
+      // Hata olursa state'i tekrar yükle
+      await loadTasks();
+      rethrow;
+    }
   }
 }
