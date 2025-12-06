@@ -244,8 +244,9 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     DateTime? dueDate;
 
     // Due date parse et
-    if (action.dueDate != null) {
-      dueDate = _parseDueDate(action.dueDate!);
+    final dueDateStr = action.dueDate;
+    if (dueDateStr != null) {
+      dueDate = _parseDueDate(dueDateStr);
     }
 
     await _ref.read(tasksProvider.notifier).addTask(
