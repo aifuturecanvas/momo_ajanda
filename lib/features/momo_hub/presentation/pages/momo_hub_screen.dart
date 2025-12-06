@@ -11,6 +11,7 @@ import 'package:momo_ajanda/features/momo_hub/presentation/widgets/voice_input_b
 import 'package:momo_ajanda/features/momo_hub/presentation/widgets/quick_add_dialogs.dart';
 import 'package:momo_ajanda/features/assistant/presentation/widgets/momo/momo_actor.dart';
 import 'package:momo_ajanda/features/assistant/presentation/widgets/momo/momo_enums.dart';
+import 'package:momo_ajanda/features/assistant/presentation/pages/chat_screen.dart';
 
 /// Global navigasyon key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -339,6 +340,32 @@ class _MomoHubScreenState extends ConsumerState<MomoHubScreen> {
                   ],
                 ),
                 actions: [
+                  // AI Chat butonu
+                  IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.orange, Colors.deepOrange],
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.chat_bubble_outline,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ChatScreen(),
+                        ),
+                      );
+                    },
+                    tooltip: 'Momo ile Sohbet',
+                  ),
                   IconButton(
                     icon: Icon(
                       isDark ? Icons.light_mode : Icons.dark_mode,
